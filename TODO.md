@@ -1,1 +1,2 @@
-- [ ] I would like to add a "Report AI To SoulOverAI" button to auto create a github issue. 
+- [ ] I would like to add a "Report AI To SoulOverAI" button to auto create a github issue.
+- [ ] AI band label even when skipping isn't enabled.
