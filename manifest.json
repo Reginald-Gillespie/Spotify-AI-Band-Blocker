@@ -1,21 +1,25 @@
-{
-    "name": "AI Band Blocker",
-    "description": "Automatically skip songs from known AI-generated artists",
-    "preview": "preview.png",
-    "main": "dist/ai_band_blocker.js",
-    "readme": "README.md",
-    "authors": [
-        {
-            "name": "WKoA",
-            "url": "https://github.com/WKoA"
-        }
-    ],
-    "tags": [
-        "music",
-        "ai",
-        "slop",
-        "artificial",
-        "blocker",
-        "skip"
-    ]
-}
+[
+    {
+        "name": "AI Band Blocker",
+        "description": "Automatically skip known AI-generated artists",
+        "preview": "preview.png",
+        "main": "dist/ai_band_blocker.js",
+        "readme": "README.md",
+        "authors": [
+            {
+                "name": "WKoA",
+                "url": "https://github.com/WKoA"
+            }
+        ],
+        "tags": [
+            "music",
+            "ai",
+            "slop",
+            "artificial",
+            "band",
+            "blocker",
+            "skip",
+            "skipper"
+        ]
+    }
+]
