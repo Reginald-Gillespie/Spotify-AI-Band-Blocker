@@ -1,5 +1,5 @@
 # AI Band Blocker
--# Powered by the [SoulOverAI project](https://souloverai.com/)
+<sub> Powered by the [SoulOverAI project](https://souloverai.com/) </sub>
 
 This plugin will automatically skip any known-AI artists. 
 
