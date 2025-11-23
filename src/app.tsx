@@ -9,12 +9,15 @@ async function main() {
     cacheKey: "ai-bands:list",
     timeKey: "ai-bands:ts",
     enabledKey: "ai-bands:enabled",
+    allowLikedKey: "ai-bands:allowLiked",
     ttl: 86400000, // 24 hours in milliseconds
   };
 
   let timeoutId: NodeJS.Timeout;
+  let updateIntervalId: NodeJS.Timeout;
   let bannedArtists: Set<string> = new Set();
   let isEnabled = Spicetify.LocalStorage.get(CONFIG.enabledKey) === "true";
+  let allowLikedSongs = Spicetify.LocalStorage.get(CONFIG.allowLikedKey) === "true";
 
   // Ban list updater
   async function updateBanList() {
@@ -69,9 +72,15 @@ async function main() {
   }
   await updateBanList();
 
-  // Toggle option
-  const toggleItem = new Spicetify.Menu.Item(
-    "Skip AI Bands",
+  // Schedule periodic updates of the ban list
+  updateIntervalId = setInterval(() => {
+    console.log("[AI Blocker] Running scheduled ban list update...");
+    updateBanList();
+  }, CONFIG.ttl);
+
+  // Create menu items for flyout
+  const enableToggle = new Spicetify.Menu.Item(
+    "Block AI Bands",
     isEnabled,
     (menuItem) => {
       isEnabled = !isEnabled;
@@ -82,10 +91,27 @@ async function main() {
       if (isEnabled) checkTrack();
     }
   );
-  toggleItem.register();
+
+  const allowLikedToggle = new Spicetify.Menu.Item(
+    "Allow Liked AI Songs",
+    allowLikedSongs,
+    (menuItem) => {
+      allowLikedSongs = !allowLikedSongs;
+      Spicetify.LocalStorage.set(CONFIG.allowLikedKey, allowLikedSongs.toString());
+      menuItem.setState(allowLikedSongs);
+      Spicetify.showNotification(`Allow Liked AI Songs ${allowLikedSongs ? "ON" : "OFF"}`);
+    }
+  );
+
+  // Create flyout menu
+  const flyoutMenu = new Spicetify.Menu.SubMenu("AI Band Blocker", [
+    enableToggle,
+    allowLikedToggle,
+  ]);
+  flyoutMenu.register();
 
   // Song checker
-  function checkTrack() {
+  async function checkTrack() {
     if (!isEnabled) return;
 
     const data = Spicetify.Player.data;
@@ -99,6 +125,22 @@ async function main() {
 
     if (match) {
       if (!Spicetify.Player.isPlaying()) return; // Do this as late a possible, spotify is laggy
+      
+      // Check if song is liked and we should allow it
+      if (allowLikedSongs) {
+        const trackUri = data.item.uri;
+        if (trackUri) {
+          try {
+            const isLiked = await Spicetify.Platform.LibraryAPI.contains(trackUri);
+            if (isLiked) {
+              console.log(`[AI Blocker] Detected AI Artist: ${match}, but song is liked. Allowing...`);
+              return;
+            }
+          } catch (error) {
+            console.error("[AI Blocker] Error checking if song is liked:", error);
+          }
+        }
+      }
       
       console.log(`[AI Blocker] Detected AI Artist: ${match}. Skipping...`);
       Spicetify.Player.next();

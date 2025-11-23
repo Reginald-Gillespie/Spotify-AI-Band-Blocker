@@ -1,11 +1,11 @@
 {
   "name": "ai_band_blocker",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Spicetify extension to block AI bands",
-  "private": true,
+  "private": false,
   "scripts": {
     "inject-hard": "npm run build && spicetify config extensions ai_band_blocker.js && spicetify apply",
-    "inject": "spicetify-creator",
+    "inject": "spicetify-creator && spicetify apply",
     "watch": "spicetify-creator --watch",
     "build": "spicetify-creator --out=dist --minify"
   },
