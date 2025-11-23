@@ -1,0 +1,1 @@
+- [ ] I would like to add a "Report AI To SoulOverAI" button to auto create a github issue. 
