@@ -5,7 +5,7 @@ async function main() {
   }
 
   const CONFIG = {
-    url: "https://raw.githubusercontent.com/romiem/ai-bands/main/ai-bands.json",
+    url: "https://raw.githubusercontent.com/romiem/ai-bands/main/dist/ai-bands.json",
     cacheKey: "ai-bands:list",
     timeKey: "ai-bands:ts",
     enabledKey: "ai-bands:enabled",
