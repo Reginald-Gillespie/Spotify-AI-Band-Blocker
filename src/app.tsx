@@ -116,8 +116,8 @@ async function main() {
 
     const data = Spicetify.Player.data;
     // Guard clauses for missing data
-    console.log(data.item.artists);
     if (!data || !data.item || !data.item.artists) return;
+    console.log(data.item.artists);
 
     // Check every artist on the current track
     const trackArtists = data.item.artists.map((a: any) => a.name.toLowerCase().trim());
