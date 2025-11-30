@@ -1,6 +1,6 @@
 # AI Band Blocker
 
-This plugin will automatically skip any known-AI artists. 
+This plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
 
 Install from the [Spicetify](https://spicetify.app/) Marketplace, or directly by copying the script from `./dist/ai_band_blocker.js`, or by cloning and running `npm install && npm run inject-hard`.
 
