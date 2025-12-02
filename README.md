@@ -4,7 +4,10 @@ This Spicetify plugin will automatically skip any known-AI artists. You can cust
 
 # Install
 Requires [Spicetify](https://spicetify.app/) to be installed.
-Install from the [Spicetify](https://spicetify.app/) Marketplace, or directly by copying the script from `./dist/ai_band_blocker.js`, or by cloning and running `npm install && npm run inject-hard`.
+
+**Install this extension by searching the [Spicetify](https://spicetify.app/) Marketplace.**
+
+_Alternatively_, directly by copying the script from `./dist/ai_band_blocker.js` into your extensions folder (will not auto update), or by cloning this repo and running `npm install && npm run inject-hard` (will not auto update).
 
 When installed, configure under the profile dropdown in the top right of Spicetify. 
 
