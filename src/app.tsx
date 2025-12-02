@@ -18,7 +18,8 @@ async function main() {
   let updateIntervalId: NodeJS.Timeout;
   let artistData: Map<string, string[]> = new Map(); // artist name -> tags
   let tagSkipStates: Map<string, boolean> = new Map(); // tag -> should skip
-  let isEnabled = Spicetify.LocalStorage.get(CONFIG.enabledKey) === "true";
+  let validTags: Set<string> = new Set(); // tags that exist in the current blocklist
+  let isEnabled = Spicetify.LocalStorage.get(CONFIG.enabledKey) !== "false"; // Default to true
   let allowLikedSongs = Spicetify.LocalStorage.get(CONFIG.allowLikedKey) === "true";
 
   function sleep(ms: number) {
@@ -112,6 +113,9 @@ async function main() {
       }
     }
 
+    // Update validTags with currently discovered tags
+    validTags = discoveredTags;
+
     // Initialize any new tags with default skip state (true)
     let newTagsFound = false;
     for (const tag of discoveredTags) {
@@ -123,8 +127,10 @@ async function main() {
 
     if (newTagsFound) {
       saveTagSkipStates();
-      updateTagMenuItems();
     }
+
+    // Update menu
+    updateTagMenuItems();
   }
   await updateBanList(false);
 
@@ -139,7 +145,9 @@ async function main() {
     tagMenuItems = [];
 
     // Sort tags alphabetically
-    const sortedTags = Array.from(tagSkipStates.keys()).sort();
+    const sortedTags = Array.from(tagSkipStates.keys())
+      .filter(tag => validTags.has(tag))
+      .sort();
 
     for (const tag of sortedTags) {
       const isSkipped = tagSkipStates.get(tag) ?? true;
