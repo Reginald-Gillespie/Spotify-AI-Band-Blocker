@@ -70,7 +70,7 @@ async function main() {
   let validTags: Set<string> = new Set(); // tags that exist in the current blocklist
   let isEnabled = Spicetify.LocalStorage.get(CONFIG.enabledKey) !== "false"; // Default to true
   let allowLikedSongs = Spicetify.LocalStorage.get(CONFIG.allowLikedKey) === "true";
-  let showAITags = Spicetify.LocalStorage.get(CONFIG.showAITagsKey) !== "false"; // Default to true
+  let showAITags = Spicetify.LocalStorage.get(CONFIG.showAITagsKey) !== "false"; // For tagging AI artists -  Default to true
   let labelAISongs = Spicetify.LocalStorage.get(CONFIG.labelAISongsKey) !== "false"; // Default to true
   let aiTagObserver: MutationObserver | null = null;
 
@@ -116,7 +116,7 @@ async function main() {
     // Find all artist links in the document
     const artistLinks = document.querySelectorAll('a[href*="/artist/"]');
 
-    // Determine current artist ID from "Show All" buttons
+    // Determine current artist ID from "Show All" buttons to put label on profile page
     let currentArtistId: string | null = null;
     const allLinks = Array.from(document.querySelectorAll('a[href*="/artist/"]'));
 
@@ -130,29 +130,39 @@ async function main() {
       }
     }
 
+    // Label everything that links to AI artists
     artistLinks.forEach((link) => {
       const linkEl = link as HTMLAnchorElement;
-
-      // Skip if already tagged
-      if (link.querySelector('.ai-band-tag') || link.nextElementSibling?.classList?.contains('ai-band-tag')) {
-        return;
-      }
 
       // Get artist ID from the href
       const artistId = extractArtistId(linkEl.href);
       if (!artistId) return;
 
-      // Skip if this link points to the current artist page
-      if (currentArtistId && artistId === currentArtistId) {
-        return;
-      }
+      // Check for existing tags
+      const existingTag = link.querySelector('.ai-band-tag');
+      const existingNextSiblingTag = link.nextElementSibling?.classList?.contains('ai-band-tag') 
+        ? link.nextElementSibling 
+        : null;
 
       // Check if this artist is AI
       if (isArtistAI(artistId)) {
+        // Skip if already tagged
+        if (existingTag || existingNextSiblingTag) {
+          return;
+        }
         const artistName = artistNames.get(artistId);
-        const linkText = linkEl.textContent?.trim() || "";
 
-        // Blacklist specific phrases
+        // Get the first base child of the linkEl to make sure we're just extracting the name
+        //   as opposed to "verified artist" text etc.
+        let nameEl: ChildNode =  linkEl;
+        let recursionLimit = 15; // Prevent infinite loops
+        while (--recursionLimit && nameEl.childNodes[0]) {
+          nameEl = nameEl.childNodes[0];
+        }
+        
+        const linkText = (nameEl as HTMLElement).textContent?.trim() || "";
+
+        // Blacklist specific artist link buttons
         if (/Discovered On|Discovery|You've liked|Show all/i.test(linkText)) {
           return;
         }
@@ -165,17 +175,36 @@ async function main() {
         // Create and insert the AI tag after the link text
         const tag = createAITag();
 
+        debugger
+
+        // Artist names in search bar
+        if (
+          nameEl?.parentElement?.parentElement?.dataset.encoreId == 'listRowTitle' &&
+          nameEl?.parentElement?.parentElement?.parentElement?.tagName.toLowerCase() === "a"
+        ) {
+          // Change style of name block to put AI tag inline
+          nameEl.parentElement.parentElement.parentElement.style.display = "inline-flex";
+          link.appendChild(tag);
+        }
         // Check if we should append inside or after the link
         // For inline artist names, we append inside to keep styling consistent
-        if (link.parentElement?.classList?.contains('encore-text') ||
+        else if (link.parentElement?.classList?.contains('encore-text') ||
           link.closest('[data-testid="tracklist-row"]') ||
           link.closest('[data-testid="track-row"]') ||
           link.closest('.main-trackList-trackListRow')) {
-          // For track lists, append after the link to avoid layout issues
           link.parentElement?.insertBefore(tag, link.nextSibling);
-        } else {
-          // For other contexts (artist pages, now playing, etc.), append inside
+        }
+        // Default for any other type of link 
+        else {
           link.appendChild(tag);
+        }
+      } else {
+        // Artist is NOT AI - remove any existing tags
+        if (existingTag) {
+          existingTag.remove();
+        }
+        if (existingNextSiblingTag) {
+          existingNextSiblingTag.remove();
         }
       }
     });
@@ -209,39 +238,13 @@ async function main() {
       }
     }
 
-    // Also check for artist names in the now playing bar and other non-link contexts
-    const nowPlayingArtists = document.querySelectorAll(
-      '[data-testid="now-playing-widget"] a[href*="/artist/"], ' +
-      '[data-testid="context-item-info-artist"], ' +
-      '.main-nowPlayingWidget-nowPlaying a[href*="/artist/"]'
-    );
-
-    nowPlayingArtists.forEach((element) => {
-      if (element.querySelector('.ai-band-tag') || element.nextElementSibling?.classList?.contains('ai-band-tag')) {
-        return;
-      }
-
-      const linkEl = element as HTMLAnchorElement;
-      const artistId = extractArtistId(linkEl.href);
-      if (artistId && isArtistAI(artistId)) {
-        const artistName = artistNames.get(artistId);
-        const linkText = linkEl.textContent?.trim() || "";
-
-        // Only tag if the link text matches the artist name
-        if (artistName && linkText.toLowerCase() === artistName.toLowerCase()) {
-          const tag = createAITag();
-          element.appendChild(tag);
-        }
-      }
-    });
-
     // Label songs by AI artists
     if (labelAISongs) {
       labelAISongRows();
     }
   }
 
-  // Scans for AI songs, called during injectAITags scan
+  // Scans for AI songs, called after injectAITags scan
   function labelAISongRows() {
     // Find track rows in playlists, albums, search results, etc.
     const trackRows = document.querySelectorAll(
@@ -273,15 +276,7 @@ async function main() {
       });
 
       if (hasAIArtist) {
-        // Grab the title, add label to it
-        const listRowTitle = row.querySelector('[data-encore-id="listRowTitle"]');
-        if (listRowTitle) {
-          const label = createAISongLabel();
-          listRowTitle.insertAdjacentElement('beforeend', label);
-          return;
-        }
-
-        // This injects playlists
+        // Inject playlist view
         const mainContent = row.querySelector(".main-trackList-rowMainContent");
         const nameDiv = mainContent?.querySelector(".encore-text-body-medium");
         if (nameDiv && mainContent) {
@@ -547,7 +542,7 @@ async function main() {
   );
 
   const showAITagsToggle = new Spicetify.Menu.Item(
-    "Show AI Tags",
+    "Label AI Artists",
     showAITags,
     (menuItem) => {
       showAITags = !showAITags;
