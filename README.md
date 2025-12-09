@@ -1,5 +1,6 @@
 # About
 This Spicetify plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
+
 <sub>Powered by the [SoulOverAI project](https://souloverai.com/about)</sub>
 
 # Install
