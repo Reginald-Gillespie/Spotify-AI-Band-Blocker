@@ -119,15 +119,15 @@ async function main() {
     // Determine current artist ID from "Show All" buttons
     let currentArtistId: string | null = null;
     const allLinks = Array.from(document.querySelectorAll('a[href*="/artist/"]'));
-    
+
     for (const link of allLinks) {
-        if (link.textContent?.trim().toLowerCase() === 'show all') {
-            const id = extractArtistId((link as HTMLAnchorElement).href);
-            if (id) {
-                currentArtistId = id;
-                break;
-            }
+      if (link.textContent?.trim().toLowerCase() === 'show all') {
+        const id = extractArtistId((link as HTMLAnchorElement).href);
+        if (id) {
+          currentArtistId = id;
+          break;
         }
+      }
     }
 
     artistLinks.forEach((link) => {
@@ -183,23 +183,23 @@ async function main() {
     // Handle artist profile page header
     // The artist name in the header is typically in an h1 element
     const artistPageHeader = document.querySelector('.main-entityHeader-title h1, .main-entityHeader-title');
-  
+
 
     if (artistPageHeader && !artistPageHeader.querySelector('.ai-band-tag') && !artistPageHeader.querySelector('.ai-band-tag-header')) {
       if (currentArtistId && isArtistAI(currentArtistId)) {
         const tag = createAITag();
         tag.classList.remove('ai-band-tag');
         tag.classList.add('ai-band-tag-header');
-        
+
         artistPageHeader.appendChild(tag);
-        
+
         // Style the container
         artistPageHeader.style.marginBottom = '12px';
         artistPageHeader.style.display = 'flex';
         artistPageHeader.style.flexWrap = 'wrap';
         artistPageHeader.style.alignItems = 'center';
         artistPageHeader.style.gap = '12px';
-        
+
         // Scale down the title
         const titleSpan = artistPageHeader.querySelector('[data-encore-id="adaptiveTitle"]');
         if (titleSpan) {
@@ -207,7 +207,7 @@ async function main() {
           titleSpan.style.fontSize = (currentSize * 0.85) + 'px'; // Scale to 85%
         }
       }
-    }            
+    }
 
     // Also check for artist names in the now playing bar and other non-link contexts
     const nowPlayingArtists = document.querySelectorAll(
@@ -226,7 +226,7 @@ async function main() {
       if (artistId && isArtistAI(artistId)) {
         const artistName = artistNames.get(artistId);
         const linkText = linkEl.textContent?.trim() || "";
-        
+
         // Only tag if the link text matches the artist name
         if (artistName && linkText.toLowerCase() === artistName.toLowerCase()) {
           const tag = createAITag();
