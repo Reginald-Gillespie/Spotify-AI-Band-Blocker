@@ -5,7 +5,8 @@
   "private": false,
   "scripts": {
     "inject-hard": "npm run build && spicetify config extensions ai_band_blocker.js && spicetify apply",
-    "inject": "spicetify-creator && spicetify apply",
+    "inject-apply": "spicetify-creator && spicetify apply",
+    "inject": "spicetify-creator",
     "watch": "spicetify-creator --watch",
     "build": "spicetify-creator --out=dist --minify"
   },
