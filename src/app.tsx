@@ -175,8 +175,6 @@ async function main() {
         // Create and insert the AI tag after the link text
         const tag = createAITag();
 
-        debugger
-
         // Artist names in search bar
         if (
           nameEl?.parentElement?.parentElement?.dataset.encoreId == 'listRowTitle' &&
