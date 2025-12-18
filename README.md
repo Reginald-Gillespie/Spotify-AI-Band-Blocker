@@ -1,3 +1,6 @@
+<img width="1590" height="335" alt="image" src="https://github.com/user-attachments/assets/049abba7-6fb8-4135-b530-457d6d2cbe9c" />
+
+
 # About
 This Spicetify plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
 
