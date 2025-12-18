@@ -14,3 +14,12 @@ When installed, configure under the profile dropdown in the top right of Spiceti
 
 # Issues
 If you encounter unskipped AI artists, please file an issue in [this repo](https://github.com/romiem/ai-bands).
+
+<br> 
+<br> 
+
+---
+
+### Similar Projects
+- [Spotify AI Music Blocker](https://github.com/CennoxX/spotify-ai-blocker) – UserScript to block AI artists from your account. 
+- [SubmitHub AI Song Checker](https://www.submithub.com/story/ai-song-checker) – Tool for detecting AI-generated songs
