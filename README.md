@@ -1,5 +1,7 @@
-<img width="1590" height="335" alt="image" src="https://github.com/user-attachments/assets/049abba7-6fb8-4135-b530-457d6d2cbe9c" />
+[![GitHub Repo](https://img.shields.io/badge/GitHub-View%20Repository-black?logo=github)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)   [![Stars](https://img.shields.io/github/stars/Reginald-Gillespie/Spotify-AI-Band-Blocker)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)
 
+
+<img width="1590" height="335" alt="image" src="https://github.com/user-attachments/assets/049abba7-6fb8-4135-b530-457d6d2cbe9c" />
 
 # About
 This Spicetify plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
