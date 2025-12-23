@@ -76,8 +76,17 @@ async function main() {
 
   function extractArtistId(spotifyUrl: string | null | undefined): string | null {
     if (!spotifyUrl) return null;
+
+    const trimmed = spotifyUrl.trim();
+
+    // Accept raw 22-char Spotify IDs as well as URLs/URIs
+    const directIdMatch = trimmed.match(/^[a-zA-Z0-9]{22}$/);
+    if (directIdMatch) {
+      return directIdMatch[0];
+    }
+
     // Handle both URLs like https://open.spotify.com/artist/ID and URIs like spotify:artist:ID
-    const urlMatch = spotifyUrl.match(/artist[\/:]([a-zA-Z0-9]+)/);
+    const urlMatch = trimmed.match(/artist[\/:]([a-zA-Z0-9]+)/);
     return urlMatch ? urlMatch[1] : null;
   }
 
