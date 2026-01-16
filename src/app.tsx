@@ -5,7 +5,7 @@ async function main() {
   }
 
   const CONFIG = {
-    url: "https://raw.githubusercontent.com/romiem/ai-bands/main/dist/artists.json",
+    url: "https://raw.githubusercontent.com/xoundbyte/soul-over-ai/main/dist/artists.json",
     cacheKey: "ai-bands:list",
     timeKey: "ai-bands:ts",
     enabledKey: "ai-bands:enabled",
