@@ -1,6 +1,6 @@
 {
   "name": "ai_band_blocker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Spicetify extension to block AI bands",
   "private": false,
   "scripts": {

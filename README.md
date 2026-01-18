@@ -18,7 +18,7 @@ _Alternatively_, directly by copying the script from `./dist/ai_band_blocker.js`
 When installed, configure under the profile dropdown in the top right of Spicetify. 
 
 # Issues
-If you encounter unskipped AI artists, please file an issue in [this repo](https://github.com/romiem/ai-bands).
+If you encounter unskipped AI artists, please file an issue in [this repo](https://github.com/xoundbyte/soul-over-ai).
 
 <br> 
 <br> 
