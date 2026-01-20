@@ -1,7 +1,14 @@
 async function main() {
+  const MAX_ATTEMPTS = 30;
+  let attempts = 0;
   // 1. Wait for Spicetify global API to be ready
   while (!Spicetify?.Player || !Spicetify?.Menu || !Spicetify?.LocalStorage) {
+    if (attempts >= MAX_ATTEMPTS) {
+      console.error("Spicetify failed to load within 5 seconds. Aborting.");
+      return; 
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
+    attempts++;
   }
 
   const CONFIG = {
