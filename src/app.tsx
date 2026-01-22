@@ -4,10 +4,10 @@ async function main() {
   // 1. Wait for Spicetify global API to be ready
   while (!Spicetify?.Player || !Spicetify?.Menu || !Spicetify?.LocalStorage) {
     if (attempts >= MAX_ATTEMPTS) {
-      console.error("Spicetify failed to load within 5 seconds. Aborting.");
+      console.error("[AI Blocker] Spicetify failed to load. Aborting.");
       return; 
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     attempts++;
   }
 
