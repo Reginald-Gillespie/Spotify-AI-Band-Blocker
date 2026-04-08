@@ -1,4 +1,8 @@
-[![GitHub Repo](https://img.shields.io/badge/GitHub-View%20Repository-black?logo=github)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)   [![Stars](https://img.shields.io/github/stars/Reginald-Gillespie/Spotify-AI-Band-Blocker)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-View%20Repository-black?logo=github&labelColor=414141)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)
+&nbsp;
+<img src="https://img.shields.io/badge/dynamic/json?url=https://api.github.com/repos/xoundbyte/soul-over-ai/contents/src&query=$.length&label=AI%20artists%20tracked&labelColor=414141&color=000000" />
+&nbsp;
+[![Stars](https://img.shields.io/github/stars/Reginald-Gillespie/Spotify-AI-Band-Blocker?style=flat&labelColor=414141&color=000000)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)
 
 <img width="1590" height="335" alt="image" src="https://github.com/user-attachments/assets/049abba7-6fb8-4135-b530-457d6d2cbe9c" />
 <sup>(Image taken with AI labels turned on, it defaults off - enable in profile settings menu)</sup>
