@@ -3,15 +3,17 @@
 [![Stars](https://img.shields.io/github/stars/Reginald-Gillespie/Spotify-AI-Band-Blocker?style=flat&labelColor=414141&color=000000)](https://github.com/Reginald-Gillespie/Spotify-AI-Band-Blocker)
 
 <img width="1590" height="335" alt="image" src="https://github.com/user-attachments/assets/049abba7-6fb8-4135-b530-457d6d2cbe9c" />
-<sup>(Image taken with AI labels turned on, it defaults off - enable in profile settings menu)</sup>
+<sup>(Image taken with AI labels turned on.)</sup>
 
 
 # About
 This Spicetify plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
 
-Data is collected from:
-- [SoulOverAI](https://souloverai.com/about)
-- [Zoundhub](https://zoundhub.com/)
+Data is collected from two providers:
+- [SoulOverAI](https://souloverai.com/about) – a curated, tagged blocklist
+- [Zoundhub](https://zoundhub.com/) – a daily catalog of artists with SubmitHub AI-detection scores
+
+The Zoundhub provider can be toggled from the profile menu, and its confidence threshold is adjustable. Provider data is cached locally and refreshed every 24 hours.
 <br>
 
 # Install
