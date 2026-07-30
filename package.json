@@ -1,6 +1,6 @@
 {
   "name": "ai_band_blocker",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Spicetify extension to block AI bands",
   "private": false,
   "scripts": {
@@ -8,13 +8,15 @@
     "inject-apply": "spicetify-creator && spicetify apply",
     "inject": "spicetify-creator",
     "watch": "spicetify-creator --watch",
-    "build": "spicetify-creator --out=dist --minify"
+    "build": "spicetify-creator --out=dist --minify",
+    "typecheck": "tsc --noEmit"
   },
   "author": "WKoA",
   "license": "MIT",
   "devDependencies": {
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
-    "spicetify-creator": "^1.0.17"
+    "spicetify-creator": "^1.0.17",
+    "typescript": "^7.0.2"
   }
 }
