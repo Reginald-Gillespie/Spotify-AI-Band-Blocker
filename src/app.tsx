@@ -5,19 +5,22 @@ async function main() {
   }
 
   const CONFIG = {
-    url: "https://raw.githubusercontent.com/xoundbyte/soul-over-ai/main/dist/artists.json",
-    zoundhubSearchUrl: "https://ellqnfjepuncnaveguzv.supabase.co/rest/v1/rpc/search_artists",
-    zoundhubSearchApiKey: "sb_publishable_AARag97tZVJl4vaeD1O_LQ_gjsnn0P9",
-    cacheKey: "ai-bands:list",
+    url: "https://zoundhub.com/data/artists-all.json",
+    cacheKey: "ai-bands:zoundhubList",
+    cacheTimeKey: "ai-bands:zoundhubListFetchedAt",
+    cacheMaxAgeMs: 12 * 60 * 60 * 1000, // Refresh the export every 12 hours
     enabledKey: "ai-bands:enabled",
     allowLikedKey: "ai-bands:allowLiked",
-    tagSkipStatesKey: "ai-bands:tagSkipStates",
     showAITagsKey: "ai-bands:showAITags",
     labelAISongsKey: "ai-bands:labelAISongs",
-    zoundhubFallbackEnabledKey: "ai-bands:zoundhubFallbackEnabled",
-    zoundhubThresholdKey: "ai-bands:zoundhubThreshold",
+    thresholdKey: "ai-bands:zoundhubThreshold",
   };
-  const ZOUNDHUB_THRESHOLD_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  const THRESHOLD_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+  // Clean up storage left by older versions (SoulOverAI list, tag filters, per-artist lookup fallback)
+  for (const legacyKey of ["ai-bands:list", "ai-bands:tagSkipStates", "ai-bands:zoundhubFallbackEnabled"]) {
+    Spicetify.LocalStorage.remove(legacyKey);
+  }
 
   // CSS for AI tags
   const aiTagStyles = document.createElement("style");
@@ -67,23 +70,19 @@ async function main() {
   document.head.appendChild(aiTagStyles);
 
   let timeoutId: NodeJS.Timeout;
-  let artistData: Map<string, string[]> = new Map(); // artist ID -> tags
-  let artistNames: Map<string, string> = new Map(); // artist ID -> display name (for notifications)
-  let tagSkipStates: Map<string, boolean> = new Map(); // tag -> should skip
-  let validTags: Set<string> = new Set(); // tags that exist in the current blocklist
+  type ArtistEntry = { name: string; score: number | null };
+  let artistData: Map<string, ArtistEntry> = new Map(); // Spotify artist ID -> Zoundhub entry
   let isEnabled = Spicetify.LocalStorage.get(CONFIG.enabledKey) !== "false"; // Default to true
   let allowLikedSongs = Spicetify.LocalStorage.get(CONFIG.allowLikedKey) === "true";
   let showAITags = Spicetify.LocalStorage.get(CONFIG.showAITagsKey) !== "false"; // For tagging AI artists -  Default to true
   let labelAISongs = Spicetify.LocalStorage.get(CONFIG.labelAISongsKey) !== "false"; // Default to true
-  let zoundhubFallbackEnabled = Spicetify.LocalStorage.get(CONFIG.zoundhubFallbackEnabledKey) !== "false";
-  const storedZoundhubThresholdRaw = Spicetify.LocalStorage.get(CONFIG.zoundhubThresholdKey);
-  const storedZoundhubThreshold = storedZoundhubThresholdRaw !== null ? Number(storedZoundhubThresholdRaw) : Number.NaN;
-  let zoundhubThreshold = ZOUNDHUB_THRESHOLD_OPTIONS.includes(storedZoundhubThreshold) ? storedZoundhubThreshold : 80;
+  const storedThresholdRaw = Spicetify.LocalStorage.get(CONFIG.thresholdKey);
+  const storedThreshold = storedThresholdRaw !== null ? Number(storedThresholdRaw) : Number.NaN;
+  let threshold = THRESHOLD_OPTIONS.includes(storedThreshold) ? storedThreshold : 80;
   let aiTagObserver: MutationObserver | null = null;
-  let zoundhubFallbackCache: Map<string, { isAI: boolean; score: number | null }> = new Map();
 
-  if (!ZOUNDHUB_THRESHOLD_OPTIONS.includes(storedZoundhubThreshold)) {
-    Spicetify.LocalStorage.set(CONFIG.zoundhubThresholdKey, zoundhubThreshold.toString());
+  if (!THRESHOLD_OPTIONS.includes(storedThreshold)) {
+    Spicetify.LocalStorage.set(CONFIG.thresholdKey, threshold.toString());
   }
 
   function extractArtistId(spotifyUrl: string | null | undefined): string | null {
@@ -102,212 +101,6 @@ async function main() {
     return urlMatch ? urlMatch[1] : null;
   }
 
-  type ZoundhubArtistMatch = {
-    slug: string;
-    name: string;
-  };
-
-  type ZoundhubTrackScore = {
-    name: string;
-    score: number;
-  };
-
-  type ZoundhubAiData = {
-    averageScore: number;
-    totalTracksAnalyzed: number;
-    tracks: ZoundhubTrackScore[];
-  };
-
-  async function lookupZoundhubArtistBySpotifyId(artistName: string, spotifyId: string): Promise<ZoundhubArtistMatch | null> {
-    const response = await fetch(CONFIG.zoundhubSearchUrl, {
-      headers: {
-        accept: "*/*",
-        apikey: CONFIG.zoundhubSearchApiKey,
-        "content-profile": "public",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ search_query: artistName }),
-      method: "POST",
-      mode: "cors",
-      credentials: "omit",
-    });
-
-    if (!response.ok) {
-      throw new Error(`[AI Blocker] Zoundhub search failed with status ${response.status}`);
-    }
-
-    const rawResults: unknown = await response.json();
-    if (!Array.isArray(rawResults)) return null;
-
-    const match = rawResults.find((entity) => {
-      if (typeof entity !== "object" || entity === null) return false;
-      const spotifyIdCandidate = (entity as { spotify_id?: unknown; spotifyId?: unknown }).spotify_id
-        ?? (entity as { spotify_id?: unknown; spotifyId?: unknown }).spotifyId;
-      const slug = (entity as { slug?: unknown }).slug;
-
-      return spotifyIdCandidate === spotifyId && typeof slug === "string" && slug.length > 0;
-    }) as { slug?: unknown; name?: unknown } | undefined;
-
-    if (!match || typeof match.slug !== "string") return null;
-
-    return {
-      slug: match.slug,
-      name: typeof match.name === "string" && match.name.trim() ? match.name : artistName,
-    };
-  }
-
-  function findArtistData(obj: unknown): { submithub?: unknown; deezer?: unknown } | null {
-    if (typeof obj !== "object" || obj === null) return null;
-
-    const asRecord = obj as Record<string, unknown>;
-    if (typeof asRecord.artist === "object" && asRecord.artist !== null) {
-      const artistRecord = asRecord.artist as Record<string, unknown>;
-      if (artistRecord.submithub !== undefined) {
-        return {
-          submithub: artistRecord.submithub,
-          deezer: artistRecord.deezer,
-        };
-      }
-    }
-
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        const result = findArtistData(item);
-        if (result) return result;
-      }
-    } else {
-      for (const value of Object.values(asRecord)) {
-        const result = findArtistData(value);
-        if (result) return result;
-      }
-    }
-
-    return null;
-  }
-
-  function extractZoundhubAiData(artistData: { submithub?: unknown; deezer?: unknown }): ZoundhubAiData | null {
-    const tracksRaw = Array.isArray(artistData.submithub) ? artistData.submithub : [];
-    const tracks = tracksRaw
-      .map((track) => {
-        if (typeof track !== "object" || track === null) return null;
-
-        const trackRecord = track as Record<string, unknown>;
-        const score = trackRecord.score;
-        const name = trackRecord.name;
-
-        if (typeof score !== "number" || Number.isNaN(score)) return null;
-
-        return {
-          name: typeof name === "string" ? name : "Unknown",
-          score,
-        } as ZoundhubTrackScore;
-      })
-      .filter((track): track is ZoundhubTrackScore => track !== null);
-
-    if (tracks.length === 0) {
-      return {
-        averageScore: 0,
-        totalTracksAnalyzed: 0,
-        tracks,
-      };
-    }
-
-    const totalScore = tracks.reduce((sum, track) => sum + track.score, 0);
-    const averageScore = totalScore / tracks.length;
-
-    return {
-      averageScore,
-      totalTracksAnalyzed: tracks.length,
-      tracks,
-    };
-  }
-
-  function parseRscForAiScores(rscPayload: string): ZoundhubAiData | null {
-    const lines = rscPayload.split("\n");
-
-    for (const line of lines) {
-      const colonIndex = line.indexOf(":");
-      if (colonIndex === -1) continue;
-
-      const dataString = line.substring(colonIndex + 1);
-      if (!dataString.startsWith("{") && !dataString.startsWith("[")) continue;
-
-      try {
-        const parsedJson = JSON.parse(dataString);
-        const artistData = findArtistData(parsedJson);
-
-        if (artistData) {
-          return extractZoundhubAiData(artistData);
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return null;
-  }
-
-  async function getZoundhubAiDataForSlug(slug: string): Promise<ZoundhubAiData | null> {
-    const response = await fetch(`https://zoundhub.com/artist/${encodeURIComponent(slug)}`, {
-      headers: {
-        accept: "*/*",
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-        rsc: "1",
-      },
-      method: "GET",
-      mode: "cors",
-      credentials: "omit",
-    });
-
-    if (!response.ok) {
-      throw new Error(`[AI Blocker] Zoundhub artist payload failed with status ${response.status}`);
-    }
-
-    const rscText = await response.text();
-    return parseRscForAiScores(rscText);
-  }
-
-  async function isArtistAIViaZoundhubFallback(artistId: string, artistName: string): Promise<{ isAI: boolean; score: number | null }> {
-    const cached = zoundhubFallbackCache.get(artistId);
-    if (cached) return cached;
-
-    const notAIResult = { isAI: false, score: null };
-
-    if (!artistName.trim()) {
-      zoundhubFallbackCache.set(artistId, notAIResult);
-      return notAIResult;
-    }
-
-    try {
-      const artistMatch = await lookupZoundhubArtistBySpotifyId(artistName, artistId);
-      if (!artistMatch) {
-        zoundhubFallbackCache.set(artistId, notAIResult);
-        return notAIResult;
-      }
-
-      const aiData = await getZoundhubAiDataForSlug(artistMatch.slug);
-      if (!aiData || !Number.isFinite(aiData.averageScore) || aiData.totalTracksAnalyzed <= 0) {
-        zoundhubFallbackCache.set(artistId, notAIResult);
-        return notAIResult;
-      }
-
-      const isAI = aiData.averageScore >= zoundhubThreshold;
-      const result = {
-        isAI,
-        score: aiData.averageScore,
-      };
-
-      zoundhubFallbackCache.set(artistId, result);
-      return result;
-    } catch (error) {
-      // Zoundhub may change over time; fail open and treat unknown lookups as non-AI.
-      console.warn(`[AI Blocker] Zoundhub fallback lookup failed for ${artistName}:`, error);
-      zoundhubFallbackCache.set(artistId, notAIResult);
-      return notAIResult;
-    }
-  }
-
   async function shouldAllowTrackBecauseLiked(trackUri: string | undefined): Promise<boolean> {
     if (!allowLikedSongs || !trackUri) return false;
 
@@ -319,19 +112,17 @@ async function main() {
     }
   }
 
-  function parseArtistTags(item: Record<string, unknown>): string[] {
-    const tagsRaw = Array.isArray(item.tags)
-      ? item.tags
-      : Array.isArray(item.markers)
-        ? item.markers
-        : [];
-
-    return tagsRaw.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0);
+  // AI Tag Injection Functions
+  // An artist counts as AI when Zoundhub's score meets the user's confidence threshold.
+  // Artists without a score are treated as not-AI (fail open).
+  function getAIArtist(artistId: string): ArtistEntry | null {
+    const entry = artistData.get(artistId);
+    if (!entry || entry.score === null || entry.score < threshold) return null;
+    return entry;
   }
 
-  // AI Tag Injection Functions
   function isArtistAI(artistId: string): boolean {
-    return artistData.has(artistId);
+    return getAIArtist(artistId) !== null;
   }
 
   // Used to label AI artists
@@ -394,7 +185,7 @@ async function main() {
         if (existingTag || existingNextSiblingTag) {
           return;
         }
-        const artistName = artistNames.get(artistId);
+        const artistName = artistData.get(artistId)?.name;
 
         // Get the first base child of the linkEl to make sure we're just extracting the name
         //   as opposed to "verified artist" text etc.
@@ -587,226 +378,130 @@ async function main() {
     removeAllAILabels();
   }
 
-  // Load tag skip states from storage
-  function loadTagSkipStates() {
-    const stored = Spicetify.LocalStorage.get(CONFIG.tagSkipStatesKey);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        tagSkipStates = new Map(Object.entries(parsed));
-      } catch (e) {
-        console.error("[AI Blocker] Failed to parse tag skip states", e);
-      }
+  let confidenceMenuItems: Spicetify.Menu.Item[] = [];
+  let confidenceSubMenu: Spicetify.Menu.SubMenu;
+
+  function applyArtistList(artists: unknown[]) {
+    artistData.clear();
+
+    for (const item of artists) {
+      if (typeof item !== "object" || item === null) continue;
+      const record = item as Record<string, unknown>;
+
+      const artistId = extractArtistId(typeof record.id === "string" ? record.id : null);
+      if (!artistId) continue;
+
+      const name = typeof record.name === "string" ? record.name : "";
+      const score = typeof record.sh_score === "number" && Number.isFinite(record.sh_score) ? record.sh_score : null;
+      artistData.set(artistId, { name, score });
     }
   }
 
-  // Save tag skip states to storage
-  function saveTagSkipStates() {
-    const obj = Object.fromEntries(tagSkipStates);
-    Spicetify.LocalStorage.set(CONFIG.tagSkipStatesKey, JSON.stringify(obj));
+  function loadCachedArtistList(): unknown[] | null {
+    const cached = Spicetify.LocalStorage.get(CONFIG.cacheKey);
+    if (!cached) return null;
+    try {
+      const parsed = JSON.parse(cached);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+      console.error("[AI Blocker] Cache parse error", e);
+      return null;
+    }
   }
 
-  loadTagSkipStates();
+  function refreshLabels() {
+    if (!showAITags) return;
+    removeAllAILabels();
+    injectAITags();
+  }
 
-  // Tag menu items - declare before functions that use them
-  let tagMenuItems: Spicetify.Menu.Item[] = [];
-  let tagSubMenu: Spicetify.Menu.SubMenu;
-  let zoundhubConfidenceMenuItems: Spicetify.Menu.Item[] = [];
-  let zoundhubConfidenceSubMenu: Spicetify.Menu.SubMenu;
+  // Zoundhub doesn't send CORS headers, so a plain fetch from the Spotify client is blocked.
+  // CosmosAsync routes the request through Spotify's native networking, which isn't subject to CORS.
+  async function fetchExport(): Promise<unknown> {
+    try {
+      const res = await fetch(CONFIG.url);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (error) {
+      console.log("[AI Blocker] Direct fetch failed, retrying via CosmosAsync.", error);
+    }
 
-  // Ban list updater
+    const body = await Spicetify.CosmosAsync.get(CONFIG.url);
+    return typeof body === "string" ? JSON.parse(body) : body;
+  }
+
+  // Ban list updater: uses the cached Zoundhub export, refetching once it is stale
   async function updateBanList() {
-    const cachedList = Spicetify.LocalStorage.get(CONFIG.cacheKey);
-    let data: any[] = [];
+    const cachedList = loadCachedArtistList();
+    if (cachedList) applyArtistList(cachedList);
 
-    // If cache exists, load it first
-    if (cachedList) {
+    const fetchedAt = Number(Spicetify.LocalStorage.get(CONFIG.cacheTimeKey));
+    const isStale = !cachedList || !Number.isFinite(fetchedAt) || Date.now() - fetchedAt > CONFIG.cacheMaxAgeMs;
+
+    if (isStale) {
+      console.log("[AI Blocker] Fetching Zoundhub artist export...");
       try {
-        data = JSON.parse(cachedList);
-      } catch (e) {
-        console.error("[AI Blocker] Cache parse error", e);
-      }
-    }
+        const data = await fetchExport();
+        const artists = (data as { artists?: unknown } | null)?.artists;
+        if (!Array.isArray(artists)) throw new Error("Unexpected export format");
 
-    // Fetch blocklist only when there is no usable cache.
-    if (data.length === 0) {
-      console.log("[AI Blocker] Fetching new blocklist...");
-      try {
-        const res = await fetch(CONFIG.url);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-
-        data = await res.json();
-
-        if (data.length > 0) {
-          Spicetify.LocalStorage.set(CONFIG.cacheKey, JSON.stringify(data));
-          console.log(`[AI Blocker] Updated cache with ${data.length} artists.`);
+        if (artists.length > 0) {
+          applyArtistList(artists);
+          // Store a compact copy; the full export is too large for LocalStorage
+          const compact = Array.from(artistData, ([id, entry]) => ({ id, name: entry.name, sh_score: entry.score }));
+          try {
+            Spicetify.LocalStorage.set(CONFIG.cacheKey, JSON.stringify(compact));
+            Spicetify.LocalStorage.set(CONFIG.cacheTimeKey, Date.now().toString());
+          } catch (e) {
+            console.error("[AI Blocker] Failed to write cache", e);
+          }
+          console.log(`[AI Blocker] Loaded ${artistData.size} artists from Zoundhub.`);
         }
       } catch (error) {
         console.error("[AI Blocker] Fetch failed, using cached data if available.", error);
       }
     }
 
-    // Process data to extract artist IDs and tags
-    artistData.clear();
-    artistNames.clear();
-    const discoveredTags = new Set<string>();
-
-    for (const item of data) {
-      let artistName: string;
-      let tags: string[] = [];
-      let spotifyUrl: string | null = null;
-
-      if (typeof item === "string") {
-        // Legacy format: just a name string (no ID available, skip)
-        continue;
-      } else if (typeof item === "object" && item !== null && "name" in item) {
-        const itemRecord = item as Record<string, unknown>;
-
-        if (itemRecord.removed === true) {
-          continue;
-        }
-
-        if (typeof itemRecord.name !== "string" || !itemRecord.name.trim()) {
-          continue;
-        }
-
-        artistName = itemRecord.name;
-        tags = parseArtistTags(itemRecord);
-
-        if (typeof itemRecord.spotify === "string") {
-          spotifyUrl = itemRecord.spotify;
-        } else if (typeof itemRecord.spotifyId === "string") {
-          spotifyUrl = itemRecord.spotifyId;
-        }
-      } else {
-        continue;
-      }
-
-      // Extract Spotify artist ID
-      const artistId = extractArtistId(spotifyUrl);
-      if (!artistId) {
-        // No valid Spotify ID, skip this artist
-        continue;
-      }
-
-      artistData.set(artistId, tags);
-      artistNames.set(artistId, artistName);
-
-      // Collect all tags
-      for (const tag of tags) {
-        discoveredTags.add(tag);
-      }
-    }
-
-    // Update validTags with currently discovered tags
-    validTags = discoveredTags;
-
-    // Initialize any new tags with default skip state (true)
-    let newTagsFound = false;
-    for (const tag of discoveredTags) {
-      if (!tagSkipStates.has(tag)) {
-        tagSkipStates.set(tag, true); // Default to skipping
-        newTagsFound = true;
-      }
-    }
-
-    if (newTagsFound) {
-      saveTagSkipStates();
-    }
-
-    // Update menu
-    updateTagMenuItems();
-
-    // Re-inject AI tags if they're enabled (to catch new artists from updated list)
-    if (showAITags) {
-      removeAllAITags();
-      removeAllAILabels();
-      injectAITags();
-    }
+    refreshLabels();
   }
   await updateBanList();
+  setInterval(updateBanList, CONFIG.cacheMaxAgeMs);
 
-  function updateTagMenuItems() {
-    // Clear existing tag menu items
-    tagMenuItems = [];
+  function updateConfidenceMenuItems() {
+    confidenceMenuItems = [];
 
-    // Sort tags alphabetically
-    const sortedTags = Array.from(tagSkipStates.keys())
-      .filter(tag => validTags.has(tag))
-      .sort();
-
-    for (const tag of sortedTags) {
-      const isSkipped = tagSkipStates.get(tag) ?? true;
-      const menuItem = new Spicetify.Menu.Item(
-        `Skip: ${tag}`,
-        isSkipped,
-        (item) => {
-          const newState = !tagSkipStates.get(tag);
-          tagSkipStates.set(tag, newState);
-          saveTagSkipStates();
-          item.setState(newState);
-          Spicetify.showNotification(`Tag "${tag}" ${newState ? "will be skipped" : "allowed"}`);
-
-          if (newState && isEnabled) checkTrack();
-        }
-      );
-      tagMenuItems.push(menuItem);
-    }
-
-    // Update the submenu if it exists
-    if (tagSubMenu) {
-      tagSubMenu.deregister();
-      tagSubMenu = new Spicetify.Menu.SubMenu("AI Filter Tags", tagMenuItems);
-      tagSubMenu.register();
-    }
-  }
-
-  function updateZoundhubConfidenceMenuItems() {
-    zoundhubConfidenceMenuItems = [];
-
-    for (const thresholdOption of ZOUNDHUB_THRESHOLD_OPTIONS) {
+    for (const thresholdOption of THRESHOLD_OPTIONS) {
       const menuItem = new Spicetify.Menu.Item(
         `${thresholdOption}%`,
-        zoundhubThreshold === thresholdOption,
+        threshold === thresholdOption,
         (item) => {
-          if (zoundhubThreshold === thresholdOption) {
+          if (threshold === thresholdOption) {
             item.setState(true);
             return;
           }
 
-          zoundhubThreshold = thresholdOption;
-          Spicetify.LocalStorage.set(CONFIG.zoundhubThresholdKey, zoundhubThreshold.toString());
-          zoundhubFallbackCache.clear();
-          updateZoundhubConfidenceMenuItems();
-          Spicetify.showNotification(`Zoundhub confidence set to ${zoundhubThreshold}%`);
+          threshold = thresholdOption;
+          Spicetify.LocalStorage.set(CONFIG.thresholdKey, threshold.toString());
+          updateConfidenceMenuItems();
+          Spicetify.showNotification(`AI confidence threshold set to ${threshold}%`);
 
-          if (isEnabled) {
-            checkTrack();
-          }
+          refreshLabels();
+          if (isEnabled) checkTrack();
         }
       );
 
-      zoundhubConfidenceMenuItems.push(menuItem);
+      confidenceMenuItems.push(menuItem);
     }
 
-    if (zoundhubConfidenceSubMenu) {
-      zoundhubConfidenceSubMenu.deregister();
-      zoundhubConfidenceSubMenu = new Spicetify.Menu.SubMenu(
-        `Zoundhub confidence (${zoundhubThreshold}%)`,
-        zoundhubConfidenceMenuItems
-      );
-      zoundhubConfidenceSubMenu.register();
+    if (confidenceSubMenu) {
+      confidenceSubMenu.deregister();
+      confidenceSubMenu = new Spicetify.Menu.SubMenu(`AI confidence threshold (${threshold}%)`, confidenceMenuItems);
+      confidenceSubMenu.register();
     }
   }
 
-  // Initialize tag menu items
-  updateTagMenuItems();
-  updateZoundhubConfidenceMenuItems();
-  tagSubMenu = new Spicetify.Menu.SubMenu("AI Filter Tags", tagMenuItems);
-  zoundhubConfidenceSubMenu = new Spicetify.Menu.SubMenu(
-    `Zoundhub confidence (${zoundhubThreshold}%)`,
-    zoundhubConfidenceMenuItems
-  );
+  updateConfidenceMenuItems();
+  confidenceSubMenu = new Spicetify.Menu.SubMenu(`AI confidence threshold (${threshold}%)`, confidenceMenuItems);
 
   // Create menu items for flyout
   const enableToggle = new Spicetify.Menu.Item(
@@ -869,31 +564,17 @@ async function main() {
     }
   );
 
-  const zoundhubFallbackToggle = new Spicetify.Menu.Item(
-    "Zoundhub fallback",
-    zoundhubFallbackEnabled,
-    (menuItem) => {
-      zoundhubFallbackEnabled = !zoundhubFallbackEnabled;
-      Spicetify.LocalStorage.set(CONFIG.zoundhubFallbackEnabledKey, zoundhubFallbackEnabled.toString());
-      menuItem.setState(zoundhubFallbackEnabled);
-      zoundhubFallbackCache.clear();
-      Spicetify.showNotification(`Zoundhub fallback ${zoundhubFallbackEnabled ? "ON" : "OFF"}`);
-    }
-  );
-
   // Create flyout menu
   const flyoutMenu = new Spicetify.Menu.SubMenu("AI Band Blocker", [
     enableToggle,
     allowLikedToggle,
     showAITagsToggle,
     labelAISongsToggle,
-    zoundhubFallbackToggle,
   ]);
   flyoutMenu.register();
 
-  // Register tag submenu separately
-  tagSubMenu.register();
-  zoundhubConfidenceSubMenu.register();
+  // Register confidence submenu separately
+  confidenceSubMenu.register();
 
   // Start AI tag observer if enabled
   if (showAITags) {
@@ -913,74 +594,27 @@ async function main() {
 
     // For collabs, only evaluate the first listed artist.
     for (const artistObj of artistsToCheck) {
-      const artistUri = (artistObj as any).uri;
-      const artistId = extractArtistId(artistUri);
-      const artistDisplayName = artistNames.get(artistId || '') || (artistObj as any).name || 'Unknown';
-
+      const artistId = extractArtistId((artistObj as any).uri);
       if (!artistId) continue;
 
-      if (!artistData.has(artistId)) {
-        if (!zoundhubFallbackEnabled) {
-          continue;
-        }
+      const aiArtist = getAIArtist(artistId);
+      if (!aiArtist) continue;
 
-        const fallbackResult = await isArtistAIViaZoundhubFallback(artistId, (artistObj as any).name || artistDisplayName);
-        if (!fallbackResult.isAI) continue;
+      if (!Spicetify.Player.isPlaying()) return;
 
-        if (!Spicetify.Player.isPlaying()) return;
+      const artistDisplayName = aiArtist.name || (artistObj as any).name || "Unknown";
+      const scoreSuffix = ` (${aiArtist.score!.toFixed(1)}% AI)`;
 
-        if (await shouldAllowTrackBecauseLiked(trackUri)) {
-          console.log(`[AI Blocker] Zoundhub fallback flagged ${artistDisplayName}, but track is liked. Allowing...`);
-          return;
-        }
-
-        const scoreSuffix = fallbackResult.score !== null
-          ? ` (${fallbackResult.score.toFixed(1)}% AI via Zoundhub)`
-          : " (AI via Zoundhub)";
-
-        console.log(`[AI Blocker] Zoundhub fallback flagged ${artistDisplayName}${scoreSuffix}. Skipping...`);
-        Spicetify.Player.next();
-        Spicetify.showNotification(`Skipped AI Band: ${artistDisplayName.toUpperCase()}${scoreSuffix}`);
+      // Check if song is liked and we should allow it
+      if (await shouldAllowTrackBecauseLiked(trackUri)) {
+        console.log(`[AI Blocker] Detected AI Artist: ${artistDisplayName}${scoreSuffix}, but song is liked. Allowing...`);
         return;
       }
 
-      const artistTags = artistData.get(artistId) || [];
-
-      // If artist has no tags, skip by default
-      if (artistTags.length === 0) {
-        if (!Spicetify.Player.isPlaying()) return;
-
-        // Check if song is liked and we should allow it
-        if (await shouldAllowTrackBecauseLiked(trackUri)) {
-          console.log(`[AI Blocker] Detected AI Artist: ${artistDisplayName}, but song is liked. Allowing...`);
-          return;
-        }
-
-        console.log(`[AI Blocker] Detected AI Artist with no tags: ${artistDisplayName}. Skipping...`);
-        Spicetify.Player.next();
-        Spicetify.showNotification(`Skipped AI Band: ${artistDisplayName.toUpperCase()}`);
-        return;
-      }
-
-      // Check if any of the artist's tags are marked for skipping
-      const hasSkippableTag = artistTags.some(tag => tagSkipStates.get(tag) === true);
-
-      if (hasSkippableTag) {
-        if (!Spicetify.Player.isPlaying()) return;
-
-        // Check if song is liked and we should allow it
-        if (await shouldAllowTrackBecauseLiked(trackUri)) {
-          const skippableTags = artistTags.filter(tag => tagSkipStates.get(tag) === true);
-          console.log(`[AI Blocker] Detected AI Artist: ${artistDisplayName} with skippable tags: ${skippableTags.join(", ")}, but song is liked. Allowing...`);
-          return;
-        }
-
-        const skippableTags = artistTags.filter(tag => tagSkipStates.get(tag) === true);
-        console.log(`[AI Blocker] Detected AI Artist: ${artistDisplayName} with skippable tags: ${skippableTags.join(", ")}. Skipping...`);
-        Spicetify.Player.next();
-        Spicetify.showNotification(`Skipped AI Band: ${artistDisplayName.toUpperCase()} (${skippableTags.join(", ")})`);
-        return;
-      }
+      console.log(`[AI Blocker] Detected AI Artist: ${artistDisplayName}${scoreSuffix}. Skipping...`);
+      Spicetify.Player.next();
+      Spicetify.showNotification(`Skipped AI Band: ${artistDisplayName.toUpperCase()}${scoreSuffix}`);
+      return;
     }
   }
   function queueCheck() {

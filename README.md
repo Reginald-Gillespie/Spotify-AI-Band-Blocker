@@ -7,11 +7,9 @@
 
 
 # About
-This Spicetify plugin will automatically skip any known-AI artists. You can customize what types of AI content it skips in the `AI Filter Tags` menu.
+This Spicetify plugin will automatically skip any known-AI artists. You can choose how confident the AI detection must be before an artist is skipped in the `AI confidence threshold` menu (default 80%).
 
-Data is collected from:
-- [SoulOverAI](https://souloverai.com/about)
-- [Zoundhub](https://zoundhub.com/)
+Data is collected from [Zoundhub](https://zoundhub.com/)'s bulk artist export, refreshed every 12 hours.
 <br>
 
 # Install
